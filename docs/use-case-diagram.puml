@@ -1,0 +1,60 @@
+@startuml TripPlannerUseCaseDiagram
+!theme plain
+left to right direction
+skinparam backgroundColor #FFFFFF
+skinparam usecase {
+    BackgroundColor #E8F4FD
+    BorderColor #4285F4
+    FontSize 11
+}
+skinparam actor {
+    BackgroundColor #FFF3E0
+    BorderColor #FF8F00
+    FontSize 12
+}
+skinparam linetype ortho
+
+' Define actors
+actor "Người dùng" as User  
+actor "Quản trị viên" as Admin
+
+rectangle "Hệ thống Trip Planner AI" {
+  
+  ' Nhóm use cases theo chức năng
+  package "Quản lý tài khoản" #LIGHTBLUE {
+    usecase "Quản lý tài khoản\n(Đăng ký/Đăng nhập/Đăng xuất/Chỉnh sửa)" as UC1
+  }
+  
+  package "Quản lý chuyến đi" #LIGHTGREEN {
+    usecase "Quản lý chuyến đi\n(Tạo/Xem/Sửa/Xóa/Chia sẻ)" as UC2
+    usecase "Tạo lịch trình bằng AI\n(Nhập thông tin/Tạo/Lưu)" as UC3
+  }
+  
+  package "Tương tác cộng đồng" #LIGHTYELLOW {
+    usecase "Tham gia cộng đồng\n(Xem/Like/Comment/Chia sẻ)" as UC4
+  }
+  
+  package "Quản trị hệ thống" #LIGHTCORAL {
+    usecase "Quản lý tài khoản người dùng\n(Thêm/Sửa/Xóa/Xem/Chặn)" as UC5
+    usecase "Quản lý nội dung\n(Duyệt/Ẩn/Xóa bài đăng)" as UC6
+    usecase "Quản lý thống kê\n(Xem báo cáo/Phân tích dữ liệu)" as UC7
+    usecase "Quản lý cài đặt hệ thống\n(Cấu hình/Bảo trì)" as UC8
+  }
+}
+
+' User relationships - màu xanh lá
+User -[#00AA00]-> UC1
+User -[#00AA00]-> UC2
+User -[#00AA00]-> UC3
+User -[#00AA00]-> UC4
+
+' Admin relationships - màu đỏ
+Admin -[#CC0000]-> UC5
+Admin -[#CC0000]-> UC6
+Admin -[#CC0000]-> UC7
+Admin -[#CC0000]-> UC8
+
+' Inheritance relationships - màu đen
+Admin --|> User
+
+@enduml
