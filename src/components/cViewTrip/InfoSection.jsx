@@ -13,6 +13,9 @@ import {
   DialogTitle,
 } from "../ui/dialog";
 import { MapPin, Calendar, Users, DollarSign } from 'lucide-react';
+import { db } from '@/services/firebaseConfig';
+import { collection, addDoc } from 'firebase/firestore';
+import { toast } from 'sonner';
 
 function InfoSection({ trip }) {
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
@@ -27,19 +30,32 @@ function InfoSection({ trip }) {
     setCaption('');
   };
 
-  const handlePostToCommunnity = () => {
-    // TODO: Implement actual posting logic
-    console.log('Posting to community:', {
-      caption,
-      trip: trip
-    });
-    
-    // Reset and close modal
-    setCaption('');
-    setIsShareModalOpen(false);
-    
-    // You can add success toast here
-    // toast.success('Trip shared to community successfully!');
+  const handlePostToCommunnity = async () => {
+    try {
+      const user = JSON.parse(localStorage.getItem('user'));
+      if (!user) {
+        toast?.error('Please log in to share!');
+        return;
+      }
+      
+      await addDoc(collection(db, 'CommunityPosts'), {
+        userId: user.uid,
+        userName: user.fullName || user.email?.split('@')[0] || 'User',
+        userAvatar: user.picture || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+        content: caption,
+        trip: trip,
+        likes: [],
+        comments: [],
+        timestamp: new Date().toISOString()
+      });
+      
+      toast?.success('Shared successfully to community!');
+      setCaption('');
+      setIsShareModalOpen(false);
+    } catch (error) {
+      console.error(error);
+      toast?.error('Error sharing post');
+    }
   };
   return (
     <div className='mb-12'>

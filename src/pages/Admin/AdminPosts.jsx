@@ -1,66 +1,61 @@
 import React, { useState, useEffect } from 'react';
 import AdminLayout from '@/layout/AdminLayout';
-import { FileText, Search, Filter, Eye, Edit, Trash2, Plus, MessageCircle, Heart, Flag } from 'lucide-react';
+import { FileText, Search, Filter, Eye, Trash2, MessageCircle, Heart, Flag } from 'lucide-react';
+import { db } from '@/services/firebaseConfig';
+import { collection, onSnapshot, getDocs, doc, deleteDoc, updateDoc } from 'firebase/firestore';
+import { toast } from 'sonner';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import TripDetailsCard from '@/components/cCommunity/TripDetailsCard';
 
 function AdminPosts() {
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+  const [selectedPost, setSelectedPost] = useState(null);
 
-  // Mock data - replace with Firebase data
   useEffect(() => {
-    const mockPosts = [
-      {
-        id: '1',
-        title: 'Amazing Da Nang Trip',
-        author: 'John Smith',
-        authorEmail: 'user1@example.com',
-        content: 'Da Nang is truly an amazing destination...',
-        status: 'published',
-        createdAt: new Date('2024-01-15'),
-        likes: 24,
-        comments: 8,
-        reports: 0,
-        category: 'review'
-      },
-      {
-        id: '2',
-        title: 'Hanoi Travel Experience',
-        author: 'Jane Doe',
-        authorEmail: 'user2@example.com', 
-        content: 'Hanoi has many interesting places...',
-        status: 'pending',
-        createdAt: new Date('2024-01-14'),
-        likes: 15,
-        comments: 5,
-        reports: 1,
-        category: 'tips'
-      },
-      {
-        id: '3',
-        title: 'Hotel Review in Hoi An',
-        author: 'Bob Johnson',
-        authorEmail: 'user3@example.com',
-        content: 'This hotel has beautiful views and great service...',
-        status: 'published',
-        createdAt: new Date('2024-01-13'),
-        likes: 31,
-        comments: 12,
-        reports: 0,
-        category: 'review'
-      }
-    ];
+    let unsubscribe = () => {};
+    
+    const fetchPosts = async () => {
+      // Đầu tiên lấy email từ user map
+      const usersSnap = await getDocs(collection(db, 'Users'));
+      const usersMap = {};
+      usersSnap.forEach(u => { usersMap[u.id] = u.data().email });
 
-    setTimeout(() => {
-      setPosts(mockPosts);
-      setLoading(false);
-    }, 1000);
+      const q = collection(db, 'CommunityPosts');
+      unsubscribe = onSnapshot(q, (snapshot) => {
+        const postsData = snapshot.docs.map(docSnap => {
+          const data = docSnap.data();
+          return {
+            id: docSnap.id,
+            ...data,
+            status: data.status || 'published',
+            likeCount: data.likes?.length || 0,
+            commentCount: data.comments?.length || 0,
+            reports: data.reports || 0,
+            createdAt: data.timestamp ? new Date(data.timestamp) : new Date(),
+            userEmail: usersMap[data.userId] || 'Chưa có email'
+          };
+        });
+        
+        // Sắp xếp bài mới nhất lên trước
+        postsData.sort((a, b) => b.createdAt - a.createdAt);
+        setPosts(postsData);
+        setLoading(false);
+      });
+    };
+    
+    fetchPosts();
+    return () => unsubscribe();
   }, []);
 
   const filteredPosts = posts.filter(post => {
-    const matchesSearch = post.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         post.author.toLowerCase().includes(searchTerm.toLowerCase());
+    const content = post.content || '';
+    const author = post.userName || '';
+    const matchesSearch = content.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         author.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesFilter = filterStatus === 'all' || post.status === filterStatus;
     return matchesSearch && matchesFilter;
   });
@@ -85,21 +80,26 @@ function AdminPosts() {
     );
   };
 
-  const handleApprove = (postId) => {
-    setPosts(posts.map(post => 
-      post.id === postId ? { ...post, status: 'published' } : post
-    ));
+  const handleApprove = async (postId) => {
+    try {
+      await updateDoc(doc(db, 'CommunityPosts', postId), { status: 'published' });
+      toast?.success('Post approved');
+    } catch(e) { toast?.error('An error occurred'); }
   };
 
-  const handleReject = (postId) => {
-    setPosts(posts.map(post => 
-      post.id === postId ? { ...post, status: 'rejected' } : post
-    ));
+  const handleReject = async (postId) => {
+    try {
+      await updateDoc(doc(db, 'CommunityPosts', postId), { status: 'rejected' });
+      toast?.success('Post rejected');
+    } catch(e) { toast?.error('An error occurred'); }
   };
 
-  const handleDelete = (postId) => {
+  const handleDelete = async (postId) => {
     if (window.confirm('Are you sure you want to delete this post?')) {
-      setPosts(posts.filter(post => post.id !== postId));
+      try {
+        await deleteDoc(doc(db, 'CommunityPosts', postId));
+        toast?.success('Post deleted successfully!');
+      } catch(e) { toast?.error('An error occurred while deleting'); }
     }
   };
 
@@ -132,54 +132,7 @@ function AdminPosts() {
           </div>
         </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
-          <div className="bg-white p-6 rounded-xl border border-[var(--color-border)]">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-[var(--color-muted)]">Total Posts</p>
-                <p className="text-2xl font-bold text-[var(--color-dark)]">{posts.length}</p>
-              </div>
-              <FileText className="w-8 h-8 text-[var(--color-primary)]" />
-            </div>
-          </div>
 
-          <div className="bg-white p-6 rounded-xl border border-[var(--color-border)]">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-[var(--color-muted)]">Pending</p>
-                <p className="text-2xl font-bold text-yellow-600">
-                  {posts.filter(p => p.status === 'pending').length}
-                </p>
-              </div>
-              <Filter className="w-8 h-8 text-yellow-500" />
-            </div>
-          </div>
-
-          <div className="bg-white p-6 rounded-xl border border-[var(--color-border)]">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-[var(--color-muted)]">Published</p>
-                <p className="text-2xl font-bold text-green-600">
-                  {posts.filter(p => p.status === 'published').length}
-                </p>
-              </div>
-              <Eye className="w-8 h-8 text-green-500" />
-            </div>
-          </div>
-
-          <div className="bg-white p-6 rounded-xl border border-[var(--color-border)]">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-[var(--color-muted)]">Reports</p>
-                <p className="text-2xl font-bold text-red-600">
-                  {posts.reduce((sum, p) => sum + p.reports, 0)}
-                </p>
-              </div>
-              <Flag className="w-8 h-8 text-red-500" />
-            </div>
-          </div>
-        </div>
 
         {/* Filters */}
         <div className="bg-white p-4 rounded-xl border border-[var(--color-border)] mb-6">
@@ -228,7 +181,9 @@ function AdminPosts() {
                   <tr key={post.id} className="border-t border-[var(--color-border)] hover:bg-[var(--color-lightgray)]/50">
                     <td className="p-4">
                       <div>
-                        <h3 className="font-medium text-[var(--color-dark)] mb-1">{post.title}</h3>
+                        <h3 className="font-medium text-[var(--color-dark)] mb-1">
+                          {post.trip?.userSelection?.location || 'General Update'}
+                        </h3>
                         <p className="text-sm text-[var(--color-muted)] line-clamp-2">
                           {post.content}
                         </p>
@@ -236,8 +191,8 @@ function AdminPosts() {
                     </td>
                     <td className="p-4">
                       <div>
-                        <p className="font-medium text-[var(--color-dark)]">{post.author}</p>
-                        <p className="text-sm text-[var(--color-muted)]">{post.authorEmail}</p>
+                        <p className="font-medium text-[var(--color-dark)]">{post.userName}</p>
+                        <p className="text-sm text-[var(--color-muted)]">{post.userEmail}</p>
                       </div>
                     </td>
                     <td className="p-4">
@@ -247,11 +202,11 @@ function AdminPosts() {
                       <div className="flex items-center space-x-4 text-sm text-[var(--color-muted)]">
                         <div className="flex items-center space-x-1">
                           <Heart className="w-4 h-4" />
-                          <span>{post.likes}</span>
+                          <span>{post.likeCount}</span>
                         </div>
                         <div className="flex items-center space-x-1">
                           <MessageCircle className="w-4 h-4" />
-                          <span>{post.comments}</span>
+                          <span>{post.commentCount}</span>
                         </div>
                         {post.reports > 0 && (
                           <div className="flex items-center space-x-1 text-red-500">
@@ -268,11 +223,10 @@ function AdminPosts() {
                     </td>
                     <td className="p-4">
                       <div className="flex items-center space-x-2">
-                        <button className="p-2 text-[var(--color-primary)] hover:bg-[var(--color-lightprimary)] rounded-lg transition-colors">
+                        <button 
+                          onClick={() => { setSelectedPost(post); setIsViewModalOpen(true); }}
+                          className="p-2 text-[var(--color-primary)] hover:bg-[var(--color-lightprimary)] rounded-lg transition-colors">
                           <Eye className="w-4 h-4" />
-                        </button>
-                        <button className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
-                          <Edit className="w-4 h-4" />
                         </button>
                         {post.status === 'pending' && (
                           <>
@@ -313,6 +267,36 @@ function AdminPosts() {
             </div>
           )}
         </div>
+
+        {/* View Post Modal */}
+        <Dialog open={isViewModalOpen} onOpenChange={setIsViewModalOpen}>
+          <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="text-xl font-semibold flex items-center gap-2">
+                Bài đăng của {selectedPost?.userName}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="py-4 space-y-4">
+              <p className="text-[var(--color-dark)] text-lg border-l-4 border-[var(--color-primary)] pl-4">{selectedPost?.content}</p>
+              
+              {selectedPost?.trip && selectedPost?.trip.userSelection && (
+                <TripDetailsCard 
+                  trip={{
+                    destination: selectedPost.trip.userSelection.location,
+                    duration: `${selectedPost.trip.userSelection.noOfDays || 0} days`,
+                    budget: selectedPost.trip.userSelection.budget,
+                    travelers: selectedPost.trip.userSelection.traveller,
+                    hotels: selectedPost.trip.tripData?.hotels?.slice(0, 3) || [],
+                    itinerary: selectedPost.trip.tripData?.itinerary || [],
+                    tags: [selectedPost.trip.userSelection.budget]
+                  }} 
+                  rating={5} 
+                />
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+
       </div>
     </AdminLayout>
   );

@@ -2,7 +2,9 @@ import React, { useState, useEffect } from 'react';
 import AdminLayout from '@/layout/AdminLayout';
 import { Search, Trash2, Mail, Calendar, MapPin, User, Plus, Eye, EyeOff } from 'lucide-react';
 import { db } from '@/services/firebaseConfig';
-import { collection, getDocs, query, where } from 'firebase/firestore';
+import { collection, getDocs, doc, deleteDoc, addDoc, updateDoc } from 'firebase/firestore';
+import { toast } from 'sonner';
+import UserAvatar from '@/components/UserAvatar';
 import {
   Dialog,
   DialogContent,
@@ -74,7 +76,8 @@ const UserList = () => {
           
           usersData.push({
             id: doc.id,
-            name: userData.name || userData.displayName || userData.given_name || 'N/A',
+            name: userData.fullName || userData.name || userData.displayName || userData.given_name || 'N/A',
+            role: userData.role || 'user',
             email: userData.email || 'N/A',
             joinDate: userData.createdAt ? userData.createdAt.toDate() : new Date(),
             tripCount: tripCount,
@@ -123,17 +126,47 @@ const UserList = () => {
   };
 
   // Handle add user form submission
-  const handleAddUser = () => {
-    // TODO: Implement actual user creation logic
-    console.log('Creating new user:', newUserData);
-    
-    // Reset form and close modal
-    setNewUserData({ fullName: '', email: '', password: '' });
-    setIsAddUserModalOpen(false);
-    setShowPassword(false);
-    
-    // You can add success toast here
-    // toast.success('User created successfully!');
+  const handleAddUser = async () => {
+    if (!newUserData.fullName || !newUserData.email) return;
+    try {
+      await addDoc(collection(db, 'Users'), {
+        fullName: newUserData.fullName,
+        email: newUserData.email,
+        createdAt: new Date(),
+        role: 'user',
+        isActive: true
+      });
+      toast?.success('User added successfully!');
+      
+      setNewUserData({ fullName: '', email: '', password: '' });
+      setIsAddUserModalOpen(false);
+      setShowPassword(false);
+      window.location.reload(); // Reload to refresh the user list
+    } catch (error) {
+      toast?.error('Error adding user!');
+    }
+  };
+
+  const handleDeleteUser = async (userId) => {
+    if (!window.confirm('Bạn có chắc muốn xoá tài khoản này không? (Chỉ xoá trên Database)')) return;
+    try {
+      await deleteDoc(doc(db, 'Users', userId));
+      setUsers(users.filter(u => u.id !== userId));
+      toast?.success('User deleted!');
+    } catch (error) {
+      toast?.error('Error deleting user!');
+    }
+  };
+
+  const handleToggleRole = async (userId, currentRole) => {
+    const newRole = currentRole === 'admin' ? 'user' : 'admin';
+    try {
+      await updateDoc(doc(db, 'Users', userId), { role: newRole });
+      setUsers(users.map(u => u.id === userId ? { ...u, role: newRole } : u));
+      toast?.success(`Role updated to ${newRole === 'admin' ? 'Admin' : 'User'}`);
+    } catch(err) {
+      toast?.error('Error updating role');
+    }
   };
 
   // Handle modal close
@@ -268,6 +301,9 @@ const UserList = () => {
                     Trips Count
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Role
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Status
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -280,12 +316,8 @@ const UserList = () => {
                   <tr key={user.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
-                        <div className="flex-shrink-0 h-10 w-10">
-                          <img
-                            className="h-10 w-10 rounded-full object-cover"
-                            src={user.avatar}
-                            alt={user.name}
-                          />
+                        <div className="flex-shrink-0 h-10 w-10 flex items-center justify-center">
+                          <UserAvatar user={{...user, picture: user.avatar}} className="h-10 w-10 text-lg" />
                         </div>
                         <div className="ml-4">
                           <div className="text-sm font-medium text-gray-900">
@@ -319,6 +351,18 @@ const UserList = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
+                      <button
+                        onClick={() => handleToggleRole(user.id, user.role)}
+                        className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors ${
+                          user.role === 'admin' 
+                            ? 'bg-purple-100 text-purple-800 border-purple-200 hover:bg-purple-200' 
+                            : 'bg-gray-100 text-gray-800 border-gray-200 hover:bg-gray-200'
+                        }`}
+                      >
+                        {user.role === 'admin' ? 'Admin' : 'User'}
+                      </button>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
                       <span className={getStatusBadge(user.status)}>
                         {user.status === 'Active' ? 'Active' : 'Inactive'}
                       </span>
@@ -326,10 +370,7 @@ const UserList = () => {
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <button
                         className="text-red-600 hover:text-red-900 bg-red-50 hover:bg-red-100 px-3 py-2 rounded-lg border border-red-200 transition-colors duration-200 flex items-center gap-2"
-                        onClick={() => {
-                          // Delete function placeholder
-                          console.log('Delete user:', user.id);
-                        }}
+                        onClick={() => handleDeleteUser(user.id)}
                       >
                         <Trash2 className="w-4 h-4" />
                         Delete

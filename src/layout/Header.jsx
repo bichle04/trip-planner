@@ -23,6 +23,7 @@ import { FcStackOfPhotos } from "react-icons/fc";
 import { FcImport } from "react-icons/fc";
 import { FcBusinessContact } from "react-icons/fc";
 import { FcManager } from "react-icons/fc";
+import UserAvatar from '@/components/UserAvatar';
 
 function Header() {
   const user = JSON.parse(localStorage.getItem('user'));
@@ -102,11 +103,10 @@ function Header() {
                 </a>
                 
                 <Popover>
-                  <PopoverTrigger className="border-none bg-transparent p-1 rounded-full hover:bg-[var(--color-lightgray)] focus:ring-2 focus:ring-[var(--color-primary)] focus:outline-none transition-all duration-200">
-                    <img 
-                      src={user?.picture} 
-                      alt="User Avatar"
-                      className='h-9 w-9 rounded-full border-2 border-[var(--color-border)] hover:border-[var(--color-primary)] transition-colors duration-200' 
+                  <PopoverTrigger className="border-none bg-transparent p-1 rounded-full hover:bg-[var(--color-lightgray)] focus:ring-2 focus:ring-[var(--color-primary)] focus:outline-none transition-all duration-200 flex items-center justify-center">
+                    <UserAvatar 
+                      user={user}
+                      className='h-9 w-9' 
                     />
                   </PopoverTrigger>
                   <PopoverContent className='w-48 p-2 bg-white border border-[var(--color-border)] rounded-lg shadow-lg'>

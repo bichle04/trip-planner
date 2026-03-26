@@ -1,8 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import AdminLayout from '@/layout/AdminLayout';
 import { FileText, MessageSquare, ThumbsUp, BarChart3, Filter } from 'lucide-react';
+import { collection, getDocs } from 'firebase/firestore';
+import { db } from '@/services/firebaseConfig';
+import { useNavigate } from 'react-router-dom';
 
 function AdminDashboard() {
+  const navigate = useNavigate();
   // State cho filters
   const [selectedMonth, setSelectedMonth] = useState('all');
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
@@ -28,37 +32,78 @@ function AdminDashboard() {
   const currentYear = new Date().getFullYear();
   const years = Array.from({ length: 4 }, (_, i) => currentYear - i);
 
-  // Mock data for dashboard (expanded with month/year data)
-  const allData = {
-    2024: {
-      1: { totalUsers: 15, newUsers: 2, totalPosts: 8, newPosts: 1, totalViews: 120, totalLikes: 25, totalComments: 12 },
-      2: { totalUsers: 18, newUsers: 3, totalPosts: 10, newPosts: 2, totalViews: 145, totalLikes: 28, totalComments: 15 },
-      3: { totalUsers: 20, newUsers: 2, totalPosts: 12, newPosts: 2, totalViews: 165, totalLikes: 32, totalComments: 18 },
-      4: { totalUsers: 23, newUsers: 3, totalPosts: 15, newPosts: 3, totalViews: 190, totalLikes: 35, totalComments: 20 },
-      5: { totalUsers: 25, newUsers: 2, totalPosts: 17, newPosts: 2, totalViews: 210, totalLikes: 38, totalComments: 23 },
-      6: { totalUsers: 28, newUsers: 3, totalPosts: 19, newPosts: 2, totalViews: 235, totalLikes: 42, totalComments: 25 },
-      7: { totalUsers: 30, newUsers: 2, totalPosts: 22, newPosts: 3, totalViews: 260, totalLikes: 45, totalComments: 28 },
-      8: { totalUsers: 32, newUsers: 2, totalPosts: 24, newPosts: 2, totalViews: 280, totalLikes: 48, totalComments: 30 },
-      9: { totalUsers: 35, newUsers: 3, totalPosts: 26, newPosts: 2, totalViews: 305, totalLikes: 52, totalComments: 33 },
-      10: { totalUsers: 38, newUsers: 3, totalPosts: 28, newPosts: 2, totalViews: 330, totalLikes: 55, totalComments: 35 },
-      11: { totalUsers: 40, newUsers: 2, totalPosts: 30, newPosts: 2, totalViews: 350, totalLikes: 58, totalComments: 38 },
-      12: { totalUsers: 42, newUsers: 2, totalPosts: 32, newPosts: 2, totalViews: 370, totalLikes: 62, totalComments: 40 }
-    },
-    2025: {
-      1: { totalUsers: 45, newUsers: 3, totalPosts: 35, newPosts: 3, totalViews: 395, totalLikes: 65, totalComments: 42 },
-      2: { totalUsers: 48, newUsers: 3, totalPosts: 37, newPosts: 2, totalViews: 420, totalLikes: 68, totalComments: 45 },
-      3: { totalUsers: 51, newUsers: 3, totalPosts: 40, newPosts: 3, totalViews: 445, totalLikes: 72, totalComments: 48 },
-      4: { totalUsers: 54, newUsers: 3, totalPosts: 43, newPosts: 3, totalViews: 470, totalLikes: 75, totalComments: 50 },
-      5: { totalUsers: 57, newUsers: 3, totalPosts: 46, newPosts: 3, totalViews: 495, totalLikes: 78, totalComments: 53 },
-      6: { totalUsers: 60, newUsers: 3, totalPosts: 49, newPosts: 3, totalViews: 520, totalLikes: 82, totalComments: 56 },
-      7: { totalUsers: 63, newUsers: 3, totalPosts: 52, newPosts: 3, totalViews: 545, totalLikes: 85, totalComments: 58 },
-      8: { totalUsers: 66, newUsers: 3, totalPosts: 55, newPosts: 3, totalViews: 570, totalLikes: 88, totalComments: 61 }
-    }
-  };
+  const [dashboardData, setDashboardData] = useState({});
+  const [realPosts, setRealPosts] = useState([]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const usersSnap = await getDocs(collection(db, 'Users'));
+        const postsSnap = await getDocs(collection(db, 'CommunityPosts'));
+
+        const aggregated = {};
+        for (let y = currentYear - 3; y <= currentYear; y++) {
+          aggregated[y] = {};
+          for (let m = 1; m <= 12; m++) {
+            aggregated[y][m] = { newUsers: 0, newPosts: 0, totalLikes: 0, totalComments: 0 };
+          }
+        }
+
+        // Aggregate users
+        usersSnap.forEach(doc => {
+           const d = doc.data();
+           if (d.createdAt) {
+             const dt = new Date(d.createdAt);
+             const y = dt.getFullYear();
+             const m = dt.getMonth() + 1;
+             if (aggregated[y] && aggregated[y][m]) {
+                aggregated[y][m].newUsers += 1;
+             }
+             // Some old users might not have createdAt or have different format, we only count valid ones
+           }
+        });
+
+        // Aggregate posts
+        const postsList = [];
+        postsSnap.forEach(docSnap => {
+           const d = docSnap.data();
+           const dt = d.timestamp ? new Date(d.timestamp) : new Date();
+           const y = dt.getFullYear();
+           const m = dt.getMonth() + 1;
+           const likesCount = d.likes?.length || 0;
+           const commentsCount = d.comments?.length || 0;
+
+           if (aggregated[y] && aggregated[y][m]) {
+              aggregated[y][m].newPosts += 1;
+              aggregated[y][m].totalLikes += likesCount;
+              aggregated[y][m].totalComments += commentsCount;
+           }
+
+           postsList.push({
+             id: docSnap.id,
+             ...d,
+             createdAt: dt,
+             likesCount,
+             commentsCount
+           });
+        });
+
+        setDashboardData(aggregated);
+        
+        // Càng mới nhất càng ở trên đầu
+        postsList.sort((a,b) => b.createdAt - a.createdAt);
+        setRealPosts(postsList.slice(0, 3));
+
+      } catch(err) {
+        console.error(err);
+      }
+    };
+    fetchData();
+  }, [currentYear]);
 
   // Generate monthly chart data for selected year
   const getMonthlyChartData = () => {
-    const yearData = allData[selectedYear] || {};
+    const yearData = dashboardData[selectedYear] || {};
     
     if (selectedMonth === 'all') {
       // Show all months
@@ -66,8 +111,8 @@ function AdminDashboard() {
         const monthData = yearData[month.value] || { newUsers: 0, newPosts: 0 };
         return {
           month: month.label,
-          users: monthData.newUsers,
-          posts: monthData.newPosts
+          users: monthData.newUsers || 0,
+          posts: monthData.newPosts || 0
         };
       });
     } else {
@@ -76,41 +121,11 @@ function AdminDashboard() {
       const monthLabel = months.find(m => m.value === selectedMonth)?.label || selectedMonth;
       return [{
         month: monthLabel,
-        users: monthData.newUsers,
-        posts: monthData.newPosts
+        users: monthData.newUsers || 0,
+        posts: monthData.newPosts || 0
       }];
     }
   };
-
-  const recentPosts = [
-    {
-      id: 1,
-      user: 'Sarah Johnson',
-      destination: 'Tokyo, Japan',
-      content: 'Amazing trip to Tokyo! The AI suggestions were perfect...',
-      likes: 234,
-      comments: 18,
-      time: '2 hours ago'
-    },
-    {
-      id: 2,
-      user: 'Mike Chen',
-      destination: 'Paris, France',
-      content: 'Honeymoon in Paris was incredible! Every recommendation...',
-      likes: 189,
-      comments: 25,
-      time: '5 hours ago'
-    },
-    {
-      id: 3,
-      user: 'Emma Wilson',
-      destination: 'Bali, Indonesia',
-      content: 'Budget-friendly Bali trip with friends was amazing...',
-      likes: 156,
-      comments: 31,
-      time: '1 day ago'
-    }
-  ];
 
   return (
     <AdminLayout title="Dashboard">
@@ -179,7 +194,7 @@ function AdminDashboard() {
                       <div className="flex-1 bg-[var(--color-lightprimary)] rounded-full h-2">
                         <div 
                           className="bg-[var(--color-primary)] h-2 rounded-full"
-                          style={{ width: `${Math.min((data.users / 5) * 100, 100)}%` }}
+                          style={{ width: `${Math.min((data.users / Math.max(1, data.users + 5)) * 100, 100)}%` }}
                         />
                       </div>
                       <div className="w-12 text-xs text-[var(--color-muted)]">{data.users}</div>
@@ -190,7 +205,7 @@ function AdminDashboard() {
                       <div className="flex-1 bg-[var(--color-lightsuccess)] rounded-full h-2">
                         <div 
                           className="bg-[var(--color-success)] h-2 rounded-full"
-                          style={{ width: `${Math.min((data.posts / 4) * 100, 100)}%` }}
+                          style={{ width: `${Math.min((data.posts / Math.max(1, data.posts + 5)) * 100, 100)}%` }}
                         />
                       </div>
                       <div className="w-12 text-xs text-[var(--color-muted)]">{data.posts}</div>
@@ -209,31 +224,33 @@ function AdminDashboard() {
             </div>
             
             <div className="space-y-4">
-              {recentPosts.map((post) => (
+              {realPosts.length > 0 ? realPosts.map((post) => (
                 <div key={post.id} className="border border-[var(--color-border)] rounded-lg p-4 hover:bg-[var(--color-lightgray)] transition-colors">
                   <div className="flex items-start justify-between mb-2">
                     <div>
-                      <h4 className="font-medium text-[var(--color-dark)]">{post.user}</h4>
-                      <p className="text-sm text-[var(--color-primary)]">{post.destination}</p>
+                      <h4 className="font-medium text-[var(--color-dark)]">{post.userName}</h4>
+                      <p className="text-sm text-[var(--color-primary)]">{post.trip?.userSelection?.location || 'No Location'}</p>
                     </div>
-                    <span className="text-xs text-[var(--color-muted)]">{post.time}</span>
+                    <span className="text-xs text-[var(--color-muted)]">{post.createdAt.toLocaleDateString()}</span>
                   </div>
                   <p className="text-sm text-[var(--color-muted)] mb-3 line-clamp-2">{post.content}</p>
                   <div className="flex items-center space-x-4 text-xs text-[var(--color-muted)]">
                     <div className="flex items-center space-x-1">
                       <ThumbsUp className="w-3 h-3" />
-                      <span>{post.likes}</span>
+                      <span>{post.likesCount}</span>
                     </div>
                     <div className="flex items-center space-x-1">
                       <MessageSquare className="w-3 h-3" />
-                      <span>{post.comments}</span>
+                      <span>{post.commentsCount}</span>
                     </div>
                   </div>
                 </div>
-              ))}
+              )) : (
+                <div className="text-sm text-[var(--color-muted)] text-center w-full py-4">No recent posts.</div>
+              )}
             </div>
 
-            <button className="w-full mt-4 py-2 text-[var(--color-primary)] hover:!bg-[var(--color-lightprimary)] rounded-lg transition-colors font-medium" style={{ backgroundColor: 'transparent', border: 'none' }}>
+            <button onClick={() => navigate('/admin/posts')} className="w-full mt-4 py-2 text-[var(--color-primary)] hover:!bg-[var(--color-lightprimary)] rounded-lg transition-colors font-medium" style={{ backgroundColor: 'transparent', border: 'none' }}>
               View All Posts
             </button>
           </div>

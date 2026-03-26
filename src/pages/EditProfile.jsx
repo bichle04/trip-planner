@@ -1,22 +1,44 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User, Mail, Lock, Camera, Save, ArrowLeft, Eye, EyeOff } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { db, auth } from '@/services/firebaseConfig';
+import { doc, updateDoc } from 'firebase/firestore';
+import { updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
+import { toast } from 'sonner';
+import UserAvatar from '@/components/UserAvatar';
 
 function EditProfile() {
   const navigate = useNavigate();
+  const [user, setUser] = useState(null);
+  
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  // Mock user data
   const [formData, setFormData] = useState({
-    fullName: 'John Doe',
-    email: 'johndoe@example.com',
+    fullName: '',
+    email: '',
+    profilePicture: '',
     currentPassword: '',
     newPassword: '',
-    confirmPassword: '',
-    profilePicture: 'https://via.placeholder.com/120'
+    confirmPassword: ''
   });
+
+  useEffect(() => {
+    const userStr = localStorage.getItem('user');
+    if (userStr) {
+      const u = JSON.parse(userStr);
+      setUser(u);
+      setFormData({
+        fullName: u.fullName || u.name || '',
+        email: u.email || '',
+        profilePicture: u.picture || u.avatar || '',
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: ''
+      });
+    }
+  }, []);
 
   const handleInputChange = (field, value) => {
     setFormData(prev => ({
@@ -47,10 +69,55 @@ function EditProfile() {
     input.click();
   };
 
-  const handleSave = () => {
-    // Mock function - chỉ tạo giao diện
-    console.log('Saving profile data:', formData);
-    alert('Profile updated successfully!');
+  const handleSave = async () => {
+    if (!user) return;
+    try {
+      // Đổi mật khẩu nếu có nhập (chỉ áp dụng cho user login bằng email)
+      if (formData.newPassword) {
+        if (user.loginMethod !== 'email') {
+          return toast?.error('Google accounts cannot change password here.');
+        }
+        if (formData.newPassword !== formData.confirmPassword) {
+          return toast?.error('New passwords do not match!');
+        }
+        if (!formData.currentPassword) {
+          return toast?.error('Please enter current password!');
+        }
+        
+        const currentUserAuth = auth.currentUser;
+        if (currentUserAuth) {
+          try {
+            const credential = EmailAuthProvider.credential(currentUserAuth.email, formData.currentPassword);
+            await reauthenticateWithCredential(currentUserAuth, credential);
+            await updatePassword(currentUserAuth, formData.newPassword);
+            toast?.success('Password changed successfully!');
+            // Reset fields
+            setFormData(prev => ({...prev, currentPassword: '', newPassword: '', confirmPassword: ''}));
+          } catch(err) {
+            console.error(err);
+            return toast?.error('Incorrect current password or authentication error!');
+          }
+        } else {
+          return toast?.error('Firebase auth session not found. Please log in again.');
+        }
+      }
+
+      // Cập nhật lên Firebase Firestore
+      const userRef = doc(db, 'Users', user.uid);
+      await updateDoc(userRef, {
+        fullName: formData.fullName,
+        picture: formData.profilePicture,
+      });
+
+      // Cập nhật localStorage
+      const updatedUser = { ...user, fullName: formData.fullName, picture: formData.profilePicture };
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+      
+      toast?.success('Profile updated successfully!');
+    } catch(err) {
+      toast?.error('Error saving changes!');
+      console.error(err);
+    }
   };
 
   return (
@@ -79,11 +146,10 @@ function EditProfile() {
             {/* Profile Picture Section */}
             <div className="flex flex-col items-center mb-8">
               <div className="relative">
-                <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-[var(--color-lightgray)]">
-                  <img
-                    src={formData.profilePicture}
-                    alt="Profile"
-                    className="w-full h-full object-cover"
+                <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-[var(--color-lightgray)] flex items-center justify-center">
+                  <UserAvatar 
+                    user={{...user, fullName: formData.fullName, picture: formData.profilePicture}} 
+                    className="w-32 h-32 text-4xl" 
                   />
                 </div>
                 <button
@@ -127,9 +193,9 @@ function EditProfile() {
                       <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[var(--color-muted)] w-5 h-5" />
                       <input
                         type="email"
+                        disabled
                         value={formData.email}
-                        onChange={(e) => handleInputChange('email', e.target.value)}
-                        className="w-full pl-12 pr-4 py-3 border border-[var(--color-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent transition-all"
+                        className="w-full pl-12 pr-4 py-3 border border-[var(--color-border)] rounded-lg bg-[var(--color-lightgray)] text-[var(--color-muted)] transition-all cursor-not-allowed"
                         placeholder="Enter email"
                       />
                     </div>
@@ -137,7 +203,8 @@ function EditProfile() {
                 </div>
               </div>
 
-              {/* Divider */}
+              {/* Mảng Change Password - Chỉ hiển thị nếu login bằng email */}
+              {user?.loginMethod === 'email' && (
               <div className="border-t border-[var(--color-border)] pt-6">
                 <h4 className="text-lg font-semibold text-[var(--color-dark)] mb-4 flex items-center">
                   <Lock className="w-5 h-5 mr-2 text-[var(--color-primary)]" />
@@ -215,17 +282,10 @@ function EditProfile() {
                   </div>
                 </div>
               </div>
+              )}
 
-              {/* Password Requirements */}
-              <div className="bg-[var(--color-lightgray)] rounded-lg p-4">
-                <h5 className="text-sm font-medium text-[var(--color-dark)] mb-2">Password Requirements:</h5>
-                <ul className="text-xs text-[var(--color-muted)] space-y-1">
-                  <li>• At least 8 characters</li>
-                  <li>• Include uppercase and lowercase letters</li>
-                  <li>• At least 1 number</li>
-                  <li>• At least 1 special character</li>
-                </ul>
-              </div>
+
+
             </div>
 
             {/* Action Buttons */}

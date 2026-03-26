@@ -18,6 +18,7 @@ import EditProfile from './pages/EditProfile';
 import AdminDashboard from './pages/Admin/AdminDashboard';
 import UserList from './pages/Admin/UserList';
 import AdminPosts from './pages/Admin/AdminPosts';
+import AdminGuard from './components/AdminGuard';
 
 const router = createBrowserRouter([
   {
@@ -90,15 +91,15 @@ const router = createBrowserRouter([
   },
   {
     path: ROUTES.ADMIN_DASHBOARD,
-    element: <AdminDashboard />,
+    element: <AdminGuard><AdminDashboard /></AdminGuard>,
   },
   {
     path: ROUTES.ADMIN_USERS,
-    element: <UserList />,
+    element: <AdminGuard><UserList /></AdminGuard>,
   },
   {
     path: ROUTES.ADMIN_POSTS,
-    element: <AdminPosts />,
+    element: <AdminGuard><AdminPosts /></AdminGuard>,
   }
 ]);
 

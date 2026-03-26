@@ -16,21 +16,21 @@ export const signUpWithEmail = async (formData) => {
     try {
         // Validate form
         if (!formData.fullName.trim() || !formData.email.trim() || !formData.password.trim() || !formData.confirmPassword.trim()) {
-            throw new Error('Vui lòng điền đầy đủ thông tin')
+            throw new Error('Please fill in all information')
         }
         
         if (formData.password !== formData.confirmPassword) {
-            throw new Error('Mật khẩu không khớp')
+            throw new Error('Passwords do not match')
         }
         
         if (formData.password.length < 6) {
-            throw new Error('Mật khẩu phải có ít nhất 6 ký tự')
+            throw new Error('Password must be at least 6 characters')
         }
 
         // Validate email format
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
         if (!emailRegex.test(formData.email.trim())) {
-            throw new Error('Email không đúng định dạng')
+            throw new Error('Invalid email format')
         }
         
         // Create user with Firebase Auth
@@ -53,7 +53,8 @@ export const signUpWithEmail = async (formData) => {
             fullName: formData.fullName.trim(),
             email: formData.email.trim(),
             createdAt: new Date(),
-            loginMethod: 'email'
+            loginMethod: 'email',
+            role: 'user'
         })
         
         // Save user info to localStorage
@@ -61,23 +62,24 @@ export const signUpWithEmail = async (formData) => {
             uid: user.uid,
             fullName: formData.fullName.trim(),
             email: user.email,
-            loginMethod: 'email'
+            loginMethod: 'email',
+            role: 'user'
         }
         localStorage.setItem('user', JSON.stringify(userInfo))
         
-        toast.success('Tạo tài khoản thành công!')
+        toast.success('Account created successfully!')
         return { success: true, user: userInfo }
         
     } catch (error) {
         console.error('Error creating account:', error)
-        let errorMessage = error.message || 'Không thể tạo tài khoản. Vui lòng thử lại.'
+        let errorMessage = error.message || 'Cannot create account. Please try again.'
         
         if (error.code === 'auth/email-already-in-use') {
-            errorMessage = 'Email này đã được đăng ký. Vui lòng sử dụng email khác.'
+            errorMessage = 'Email is already registered. Please use another email.'
         } else if (error.code === 'auth/weak-password') {
-            errorMessage = 'Mật khẩu quá yếu. Vui lòng sử dụng mật khẩu mạnh hơn.'
+            errorMessage = 'Password is too weak. Please use a stronger password.'
         } else if (error.code === 'auth/invalid-email') {
-            errorMessage = 'Email không đúng định dạng.'
+            errorMessage = 'Invalid email format.'
         }
         
         toast.error(errorMessage)
@@ -90,13 +92,13 @@ export const loginWithEmail = async (formData) => {
     try {
         // Validate form
         if (!formData.email.trim() || !formData.password.trim()) {
-            throw new Error('Vui lòng điền đầy đủ thông tin')
+            throw new Error('Please fill in all information')
         }
 
         // Validate email format
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
         if (!emailRegex.test(formData.email.trim())) {
-            throw new Error('Email không đúng định dạng')
+            throw new Error('Invalid email format')
         }
         
         // Sign in with Firebase Auth
@@ -120,7 +122,8 @@ export const loginWithEmail = async (formData) => {
                 uid: user.uid,
                 fullName: user.displayName || 'User',
                 email: user.email,
-                loginMethod: 'email'
+                loginMethod: 'email',
+                role: 'user'
             }
             await setDoc(doc(db, 'Users', user.uid), userData)
         }
@@ -130,27 +133,28 @@ export const loginWithEmail = async (formData) => {
             uid: user.uid,
             fullName: userData.fullName,
             email: user.email,
-            loginMethod: userData.loginMethod || 'email'
+            loginMethod: userData.loginMethod || 'email',
+            role: userData.role || 'user'
         }
         localStorage.setItem('user', JSON.stringify(userInfo))
         
-        toast.success('Đăng nhập thành công!')
+        toast.success('Login successfully!')
         return { success: true, user: userInfo }
         
     } catch (error) {
         console.error('Error logging in:', error)
-        let errorMessage = error.message || 'Đăng nhập thất bại. Vui lòng thử lại.'
+        let errorMessage = error.message || 'Login failed. Please try again.'
         
         if (error.code === 'auth/user-not-found') {
-            errorMessage = 'Nhập sai thông tin đăng nhập. Vui lòng kiểm tra lại email và mật khẩu.'
+            errorMessage = 'Invalid credentials. Please check your email and password.'
         } else if (error.code === 'auth/wrong-password') {
-            errorMessage = 'Nhập sai thông tin đăng nhập. Vui lòng kiểm tra lại email và mật khẩu.'
+            errorMessage = 'Invalid credentials. Please check your email and password.'
         } else if (error.code === 'auth/invalid-email') {
-            errorMessage = 'Email không đúng định dạng.'
+            errorMessage = 'Invalid email format.'
         } else if (error.code === 'auth/too-many-requests') {
-            errorMessage = 'Quá nhiều lần thử đăng nhập. Vui lòng thử lại sau.'
+            errorMessage = 'Too many attempts. Please try again later.'
         } else if (error.code === 'auth/invalid-credential') {
-            errorMessage = 'Nhập sai thông tin đăng nhập. Vui lòng kiểm tra lại email và mật khẩu.'
+            errorMessage = 'Invalid credentials. Please check your email and password.'
         }
         
         toast.error(errorMessage)
@@ -177,15 +181,25 @@ export const signInWithGoogle = async (tokenInfo) => {
         const userCredential = await signInWithCredential(auth, credential)
         const user = userCredential.user
         
-        // Save additional user data to Firestore
-        await setDoc(doc(db, 'Users', user.uid), {
+        // Save additional user data to Firestore and fetch role
+        const userRef = doc(db, 'Users', user.uid);
+        const userDoc = await getDoc(userRef);
+        let userData = {
             uid: user.uid,
             fullName: googleUser.name,
             email: googleUser.email,
             picture: googleUser.picture,
-            createdAt: new Date(),
             loginMethod: 'google'
-        }, { merge: true })
+        };
+
+        if (userDoc.exists()) {
+            userData = { ...userDoc.data(), ...userData };
+            await setDoc(userRef, userData, { merge: true });
+        } else {
+            userData.createdAt = new Date();
+            userData.role = 'user';
+            await setDoc(userRef, userData, { merge: true });
+        }
         
         // Save user info to localStorage
         const userInfo = {
@@ -193,16 +207,17 @@ export const signInWithGoogle = async (tokenInfo) => {
             fullName: googleUser.name,
             email: googleUser.email,
             picture: googleUser.picture,
-            loginMethod: 'google'
+            loginMethod: 'google',
+            role: userData.role || 'user'
         }
         localStorage.setItem('user', JSON.stringify(userInfo))
         
-        toast.success('Đăng nhập thành công!')
+        toast.success('Login successfully!')
         return { success: true, user: userInfo }
         
     } catch (error) {
         console.error('Error logging in with Google:', error)
-        toast.error('Đăng nhập thất bại. Vui lòng thử lại.')
+        toast.error('Login failed. Please try again.')
         return { success: false, error: error.message }
     }
 }
