@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { X, Menu, LayoutDashboard, Users, FileText, LogOut } from 'lucide-react';
+import { logout } from '@/services/authService';
 
 function AdminSidebar({ isOpen, onToggle }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const userString = localStorage.getItem('user');
+  const user = userString ? JSON.parse(userString) : null;
 
   const menuItems = [
     {
@@ -35,10 +38,15 @@ function AdminSidebar({ isOpen, onToggle }) {
     }
   };
 
-  const handleLogout = () => {
-    // Add logout logic here
-    console.log('Logout clicked');
-    navigate('/');
+  const handleLogout = async () => {
+    try {
+      await logout();
+      navigate('/');
+    } catch (error) {
+      console.error('Logout error:', error);
+      localStorage.clear();
+      navigate('/');
+    }
   };
 
   return (
@@ -126,13 +134,17 @@ function AdminSidebar({ isOpen, onToggle }) {
 
         {/* Footer */}
         <div className="p-4 border-t border-[var(--color-border)] flex-shrink-0 mt-auto">
-          <div className="flex items-center space-x-3 p-3 bg-[var(--color-lightgray)] rounded-xl">
-            <div className="w-8 h-8 bg-gradient-to-br from-[var(--color-success)] to-[var(--color-warning)] rounded-full flex items-center justify-center">
-              <span className="text-white text-sm font-bold">A</span>
-            </div>
-            <div className="flex-1">
-              <p className="text-sm font-medium text-[var(--color-dark)]">Admin User</p>
-              <p className="text-xs text-[var(--color-muted)]">admin@tripplanner.com</p>
+          <div className="flex items-center space-x-3 p-3 bg-[var(--color-lightgray)] rounded-xl overflow-hidden">
+            {user?.picture ? (
+              <img src={user?.picture} alt="Avatar" className='h-8 w-8 rounded-full border-2 border-[var(--color-success)] object-cover' />
+            ) : (
+              <div className="w-8 h-8 bg-gradient-to-br from-[var(--color-success)] to-[var(--color-warning)] rounded-full flex items-center justify-center shrink-0">
+                <span className="text-white text-sm font-bold">{user?.fullName?.charAt(0)?.toUpperCase() || 'A'}</span>
+              </div>
+            )}
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-[var(--color-dark)] truncate">{user?.fullName || 'Admin User'}</p>
+              <p className="text-xs text-[var(--color-muted)] truncate">{user?.email || 'admin@tripplanner.com'}</p>
             </div>
           </div>
           <button 

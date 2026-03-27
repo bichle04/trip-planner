@@ -39,9 +39,14 @@ function Login() {
 
     const handleLogin = async (e) => {
         e.preventDefault()
-        
+
         const result = await loginWithEmail(formData)
         if (result.success) {
+            if (result.user?.role === 'admin') {
+                window.location.href = '/admin/dashboard';
+                return;
+            }
+
             // Kiểm tra xem có form data từ CreateTrip không
             const savedFormData = localStorage.getItem('createTripFormData');
             if (savedFormData) {
@@ -62,6 +67,11 @@ function Login() {
     const GetUserProfile = async (tokenInfo) => {
         const result = await signInWithGoogle(tokenInfo)
         if (result.success) {
+            if (result.user?.role === 'admin') {
+                window.location.href = '/admin/dashboard';
+                return;
+            }
+
             // Kiểm tra xem có form data từ CreateTrip không
             const savedFormData = localStorage.getItem('createTripFormData');
             if (savedFormData) {
@@ -114,11 +124,10 @@ function Login() {
                                 value={formData.email}
                                 onChange={handleInputChange}
                                 placeholder='Enter your email'
-                                className={`w-full border-2 focus:ring-[var(--color-primary)] text-[var(--color-dark)] bg-white rounded-lg h-12 text-base ${
-                                    emailError 
-                                        ? 'border-red-500 focus:border-red-500' 
+                                className={`w-full border-2 focus:ring-[var(--color-primary)] text-[var(--color-dark)] bg-white rounded-lg h-12 text-base ${emailError
+                                        ? 'border-red-500 focus:border-red-500'
                                         : 'border-gray-300 focus:border-[var(--color-primary)]'
-                                }`}
+                                    }`}
                                 required
                             />
                             {emailError && (
